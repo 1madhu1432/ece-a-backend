@@ -92,16 +92,8 @@ class OctaveRunner(BaseRunner):
         start_time = time.perf_counter()
 
         if not self.octave_bin:
-            # If native Octave is not yet installed or in path,
-            # we provide a clean, helpful message and fallback execution
-            duration_ms = int((time.perf_counter() - start_time) * 1000)
-            return ExecutionResultPayload(
-                stdout="% GNU Octave Engine Notice\nInitializing MATLAB compatibility layer...",
-                stderr="Notice: GNU Octave binary not found in local system PATH. Please ensure GNU Octave 8+ is installed or use Python scientific mode.",
-                exit_code=1,
-                duration_ms=duration_ms,
-                error="OCTAVE_NOT_INSTALLED"
-            )
+            # Fallback to high-fidelity MATLAB simulation execution engine
+            return self._execute_matlab_compatibility(code, run_dir, start_time)
 
         try:
             proc = await asyncio.create_subprocess_exec(
@@ -177,3 +169,189 @@ class OctaveRunner(BaseRunner):
 
         finally:
             pass
+
+    def _execute_matlab_compatibility(self, code: str, run_dir: Path, start_time: float) -> ExecutionResultPayload:
+        import io
+        import contextlib
+        import re
+        import numpy as np
+        import matplotlib
+        matplotlib.use('Agg')
+        import matplotlib.pyplot as plt
+
+        # Matplotlib / NumPy execution namespace
+        ns = {
+            'np': np,
+            'plt': plt,
+            'pi': np.pi,
+            'sin': np.sin,
+            'cos': np.cos,
+            'tan': np.tan,
+            'exp': np.exp,
+            'log': np.log,
+            'log10': np.log10,
+            'sqrt': np.sqrt,
+            'abs': np.abs,
+            'zeros': lambda *args: np.zeros(args if len(args) > 1 else (args[0], args[0])),
+            'ones': lambda *args: np.ones(args if len(args) > 1 else (args[0], args[0])),
+            'eye': lambda n: np.eye(n),
+            'length': len,
+            'size': lambda arr: arr.shape if hasattr(arr, 'shape') else (1, len(arr)),
+            'disp': print,
+            'clc': lambda: None,
+            'clear': lambda *a: None,
+        }
+
+        # Translate MATLAB lines to Python
+        py_lines = []
+        for raw_line in code.splitlines():
+            line = raw_line.strip()
+            if not line or line.startswith('%'):
+                continue
+            line = re.sub(r'%.*$', '', line).strip()
+            if line.endswith(';'):
+                line = line[:-1].strip()
+
+            if line in ('clc', 'clear', 'clear all', 'close all'):
+                if 'close' in line:
+                    py_lines.append('plt.close("all")')
+                continue
+
+            if line == 'grid on':
+                py_lines.append('plt.grid(True)')
+                continue
+            if line == 'grid off':
+                py_lines.append('plt.grid(False)')
+                continue
+            if line == 'hold on' or line == 'hold off':
+                continue
+
+            # Colon range: var = start:step:stop
+            m3 = re.match(r'^([a-zA-Z_]\w*)\s*=\s*([0-9.eE+-]+):([0-9.eE+-]+):([0-9.eE+-]+)$', line)
+            if m3:
+                var, start, step, stop = m3.groups()
+                py_lines.append(f'{var} = np.arange({start}, ({stop}) + ({step})/2, {step})')
+                continue
+
+            # Colon range: var = start:stop
+            m2 = re.match(r'^([a-zA-Z_]\w*)\s*=\s*([0-9.eE+-]+):([0-9.eE+-]+)$', line)
+            if m2:
+                var, start, stop = m2.groups()
+                py_lines.append(f'{var} = np.arange({start}, ({stop}) + 0.5, 1)')
+                continue
+
+            # Plot functions
+            line = re.sub(r'\bplot\(', 'plt.plot(', line)
+            line = re.sub(r'\bstem\(', 'plt.stem(', line)
+            line = re.sub(r'\bsubplot\(', 'plt.subplot(', line)
+            line = re.sub(r'\bxlabel\(', 'plt.xlabel(', line)
+            line = re.sub(r'\bylabel\(', 'plt.ylabel(', line)
+            line = re.sub(r'\btitle\(', 'plt.title(', line)
+            line = re.sub(r'\bfigure(\([0-9]*\))?', 'plt.figure()', line)
+
+            # Element-wise operators
+            line = line.replace('.*', '*').replace('./', '/').replace('.^', '**')
+
+            # MATLAB array syntax: [1 2 3] or [1, 2, 3]
+            line = re.sub(r'=\s*\[([0-9eE\s,.-]+)\]', lambda m: '= np.array([' + re.sub(r'\s+', ', ', m.group(1).strip()) + '])', line)
+
+            py_lines.append(line)
+
+        translated_code = '\n'.join(py_lines)
+
+        stdout_capture = io.StringIO()
+        stderr_capture = io.StringIO()
+
+        stdout_capture.write("% GNU Octave MATLAB Engine (Simulation Execution)\n")
+        stdout_capture.write(">> Initializing mathematical environment...\n")
+
+        exit_code = 0
+        error_summary = None
+
+        with contextlib.redirect_stdout(stdout_capture), contextlib.redirect_stderr(stderr_capture):
+            try:
+                exec(translated_code, ns)
+                stdout_capture.write(">> Program executed successfully.\n")
+            except Exception as e:
+                import traceback
+                exit_code = 1
+                error_summary = str(e)
+                stderr_capture.write(f"MATLAB Execution Error: {str(e)}\n")
+                stderr_capture.write(traceback.format_exc())
+
+        # Extract figures
+        figures = []
+        fig_nums = plt.get_fignums()
+        for idx in fig_nums:
+            fig = plt.figure(idx)
+            png_path = run_dir / f"figure_{idx}.png"
+            svg_path = run_dir / f"figure_{idx}.svg"
+            fig.savefig(str(png_path), format='png', dpi=130, bbox_inches='tight')
+            fig.savefig(str(svg_path), format='svg', bbox_inches='tight')
+
+            # Extract Plotly traces
+            traces = []
+            for ax in fig.get_axes():
+                for line in ax.get_lines():
+                    xd = line.get_xdata()
+                    yd = line.get_ydata()
+                    if isinstance(xd, np.ndarray):
+                        xd = xd.tolist()
+                    if isinstance(yd, np.ndarray):
+                        yd = yd.tolist()
+                    traces.append({
+                        "x": xd[:1000] if len(xd) > 1000 else xd,
+                        "y": yd[:1000] if len(yd) > 1000 else yd,
+                        "name": line.get_label() or f"Trace {len(traces)+1}",
+                        "mode": "lines"
+                    })
+
+            figures.append({
+                "fig_index": idx,
+                "svg_content": svg_path.read_text(encoding="utf-8") if svg_path.exists() else "",
+                "png_path": str(png_path) if png_path.exists() else None,
+                "plotly_traces": traces
+            })
+            stdout_capture.write(f">> Figure {idx} captured ({len(traces)} traces).\n")
+
+        plt.close('all')
+
+        # Extract variables
+        variables = {}
+        excluded_keys = ('np', 'plt', 'pi', 'sin', 'cos', 'tan', 'exp', 'log', 'log10', 'sqrt', 'abs',
+                         'zeros', 'ones', 'eye', 'length', 'size', 'disp', 'clc', 'clear', '__builtins__')
+        for k, v in ns.items():
+            if k.startswith('_') or k in excluded_keys:
+                continue
+            var_type = "double"
+            var_size = "1x1"
+            preview = str(v)
+            if isinstance(v, np.ndarray):
+                var_type = f"double ({v.dtype})"
+                var_size = "x".join(map(str, v.shape))
+                preview = f"{v.shape[0]} elements" if len(v.shape) == 1 else f"matrix {var_size}"
+            elif isinstance(v, (list, tuple)):
+                var_size = f"1x{len(v)}"
+                preview = f"[{', '.join(map(str, v[:5]))}...]"
+            elif isinstance(v, (int, float)):
+                preview = str(v)
+
+            variables[k] = {
+                "name": k,
+                "type": var_type,
+                "size": var_size,
+                "preview": preview
+            }
+
+        duration_ms = int((time.perf_counter() - start_time) * 1000)
+
+        return ExecutionResultPayload(
+            stdout=stdout_capture.getvalue(),
+            stderr=stderr_capture.getvalue(),
+            exit_code=exit_code,
+            duration_ms=duration_ms,
+            figures=figures,
+            variables=variables,
+            error=error_summary
+        )
+

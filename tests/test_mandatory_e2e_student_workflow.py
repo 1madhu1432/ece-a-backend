@@ -1,5 +1,6 @@
 import pytest
 import asyncio
+import uuid
 from httpx import AsyncClient, ASGITransport
 from app.main import app
 from app.core.init_db import init_database
@@ -13,8 +14,10 @@ async def test_mandatory_16_step_student_workflow():
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         # Step 1: Register new student
+        rand_suffix = uuid.uuid4().hex[:6]
+        test_email = f"student_{rand_suffix}@nitc.ac.in"
         reg_payload = {
-            "email": "rohan.sharma@nitc.ac.in",
+            "email": test_email,
             "password": "SecureStudentPass2024!",
             "full_name": "Rohan Sharma",
             "college_name": "NIT Calicut",
@@ -24,12 +27,12 @@ async def test_mandatory_16_step_student_workflow():
         reg_resp = await client.post("/api/v1/auth/register", json=reg_payload)
         assert reg_resp.status_code == 201, f"Register failed: {reg_resp.text}"
         student_data = reg_resp.json()
-        assert student_data["email"] == "rohan.sharma@nitc.ac.in"
+        assert student_data["email"] == test_email
         print("\n[Step 1 PASS] Student registered successfully.")
 
         # Step 2: Log in
         login_resp = await client.post("/api/v1/auth/login", json={
-            "email": "rohan.sharma@nitc.ac.in",
+            "email": test_email,
             "password": "SecureStudentPass2024!"
         })
         assert login_resp.status_code == 200, f"Login failed: {login_resp.text}"
@@ -170,7 +173,7 @@ print(f'Signal length: {len(signal)} samples. Peak amplitude: {np.max(signal):.2
 
         # Step 14: Log in again
         relogin_resp = await client.post("/api/v1/auth/login", json={
-            "email": "rohan.sharma@nitc.ac.in",
+            "email": test_email,
             "password": "SecureStudentPass2024!"
         })
         assert relogin_resp.status_code == 200
