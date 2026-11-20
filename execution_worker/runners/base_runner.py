@@ -10,6 +10,7 @@ class ExecutionResultPayload(BaseModel):
     figures: List[Dict[str, Any]] = [] # [{ "type": "svg", "path": "...", "data": ... }]
     variables: Dict[str, Any] = {} # { "varName": { "type": "matrix", "size": "1x100", "preview": "..." } }
     error: Optional[str] = None
+    run_dir: Optional[str] = None
 
 class BaseRunner(ABC):
     @abstractmethod

@@ -78,7 +78,9 @@ async def run_code(
     for fig in result.figures:
         fig_idx = fig["fig_index"]
         if fig.get("png_path") and os.path.exists(fig["png_path"]):
-            dest_filename = f"{execution.id}_fig_{fig_idx}.png"
+            orig_filename = fig.get("filename") or f"Figure_{fig_idx}.png"
+            clean_name = os.path.basename(orig_filename)
+            dest_filename = f"{execution.id}_{clean_name}"
             dest_path = os.path.join(settings.STORAGE_DIR, "artifacts", dest_filename)
             shutil.copyfile(fig["png_path"], dest_path)
             file_size = os.path.getsize(dest_path)
@@ -87,7 +89,7 @@ async def run_code(
                 execution_id=execution.id,
                 artifact_type="figure_png",
                 storage_key=dest_filename,
-                filename=f"Figure {fig_idx}",
+                filename=clean_name,
                 file_size_bytes=file_size,
                 mime_type="image/png"
             )
@@ -100,6 +102,10 @@ async def run_code(
                 mime_type=art.mime_type,
                 download_url=f"/api/v1/storage/artifacts/{dest_filename}"
             ))
+
+    # Clean temporary execution sandbox after copying artifacts
+    if result.run_dir and os.path.exists(result.run_dir):
+        shutil.rmtree(result.run_dir, ignore_errors=True)
 
     return ExecutionResponse(
         id=execution.id,

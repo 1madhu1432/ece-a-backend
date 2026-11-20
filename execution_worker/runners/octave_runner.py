@@ -68,6 +68,9 @@ class OctaveRunner(BaseRunner):
 
         # Check typical Windows install paths
         candidates = [
+            r"C:\Users\resum\Octave\octave-11.3.0-w64\mingw64\bin\octave-cli.exe",
+            os.path.expanduser(r"~\Octave\octave-11.3.0-w64\mingw64\bin\octave-cli.exe"),
+            os.path.expanduser(r"~\Octave\bin\octave-cli.exe"),
             r"C:\Program Files\GNU Octave\Octave-11.3.0\mingw64\bin\octave-cli.exe",
             r"C:\Program Files\GNU Octave\Octave-9.2.0\mingw64\bin\octave-cli.exe",
             r"C:\Program Files\GNU Octave\Octave-8.4.0\mingw64\bin\octave-cli.exe",
@@ -96,6 +99,15 @@ class OctaveRunner(BaseRunner):
             return self._execute_matlab_compatibility(code, run_dir, start_time)
 
         try:
+            # Prepare sanitized execution environment without backend secrets
+            allowed_keys = {"PATH", "SYSTEMROOT", "WINDIR", "TEMP", "TMP", "USERPROFILE", "LANG", "LC_ALL", "OPENBLAS_NUM_THREADS"}
+            safe_env = {k: v for k, v in os.environ.items() if k in allowed_keys or k.startswith("OCTAVE_")}
+            if self.octave_bin:
+                oct_bin_dir = os.path.dirname(self.octave_bin)
+                usr_bin_dir = os.path.normpath(os.path.join(oct_bin_dir, "..", "..", "usr", "bin"))
+                safe_env["PATH"] = f"{oct_bin_dir};{usr_bin_dir};{safe_env.get('PATH', '')}"
+                safe_env["OPENBLAS_NUM_THREADS"] = "2"
+
             proc = await asyncio.create_subprocess_exec(
                 self.octave_bin,
                 "--no-gui",
@@ -103,6 +115,7 @@ class OctaveRunner(BaseRunner):
                 "--silent",
                 "wrapper.m",
                 cwd=str(run_dir),
+                env=safe_env,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE
             )
@@ -122,24 +135,40 @@ class OctaveRunner(BaseRunner):
                     stderr="Execution timed out after 15 seconds.",
                     exit_code=-1,
                     duration_ms=duration_ms,
-                    error="TIMEOUT"
+                    error="TIMEOUT",
+                    run_dir=str(run_dir)
                 )
 
             duration_ms = int((time.perf_counter() - start_time) * 1000)
             stdout_str = stdout_data.decode("utf-8", errors="replace")
             stderr_str = stderr_data.decode("utf-8", errors="replace")
 
-            # Extract generated figures
+            # Check if execution failed due to host Code Integrity / Smart App Control block
+            if exit_code != 0 and (not stdout_str.strip()):
+                return self._execute_matlab_compatibility(code, run_dir, start_time)
+
+            # Extract generated figures (both wrapper exports and user saveas files)
             figures = []
-            for svg_p in sorted(run_dir.glob("figure_*.svg")):
-                fig_idx = int(svg_p.stem.split("_")[-1])
-                png_p = run_dir / f"figure_{fig_idx}.png"
+            for svg_p in sorted(run_dir.glob("*.svg")):
+                fig_idx = len(figures) + 1
+                png_p = svg_p.with_suffix(".png")
                 figures.append({
                     "fig_index": fig_idx,
+                    "filename": png_p.name if png_p.exists() else svg_p.name,
                     "svg_content": svg_p.read_text(encoding="utf-8"),
                     "png_path": str(png_p) if png_p.exists() else None,
                     "plotly_traces": []
                 })
+            for png_p in sorted(run_dir.glob("*.png")):
+                if not any(f.get("png_path") == str(png_p) for f in figures):
+                    fig_idx = len(figures) + 1
+                    figures.append({
+                        "fig_index": fig_idx,
+                        "filename": png_p.name,
+                        "svg_content": "",
+                        "png_path": str(png_p),
+                        "plotly_traces": []
+                    })
 
             # Extract variables
             variables = {}
@@ -164,7 +193,8 @@ class OctaveRunner(BaseRunner):
                 exit_code=exit_code,
                 duration_ms=duration_ms,
                 figures=figures,
-                variables=variables
+                variables=variables,
+                run_dir=str(run_dir)
             )
 
         finally:
@@ -179,7 +209,17 @@ class OctaveRunner(BaseRunner):
         matplotlib.use('Agg')
         import matplotlib.pyplot as plt
 
-        # Matplotlib / NumPy execution namespace
+        def _saveas_impl(fig_obj, filename, *args):
+            if callable(fig_obj):
+                fig_obj = fig_obj()
+            clean_name = os.path.basename(str(filename).strip("'\""))
+            target_p = run_dir / clean_name
+            if hasattr(fig_obj, 'savefig'):
+                fig_obj.savefig(str(target_p), dpi=130, bbox_inches='tight')
+            else:
+                plt.savefig(str(target_p), dpi=130, bbox_inches='tight')
+
+        # Matplotlib / NumPy / SciPy execution namespace
         ns = {
             'np': np,
             'plt': plt,
@@ -187,6 +227,7 @@ class OctaveRunner(BaseRunner):
             'sin': np.sin,
             'cos': np.cos,
             'tan': np.tan,
+            'sinc': np.sinc,
             'exp': np.exp,
             'log': np.log,
             'log10': np.log10,
@@ -200,6 +241,29 @@ class OctaveRunner(BaseRunner):
             'disp': print,
             'clc': lambda: None,
             'clear': lambda *a: None,
+            'gcf': plt.gcf,
+            'saveas': _saveas_impl,
+            '_saveas_impl': _saveas_impl,
+            'fft': np.fft.fft,
+            'ifft': np.fft.ifft,
+            'fftshift': np.fft.fftshift,
+            'conv': lambda a, b, *m: np.convolve(a, b, m[0] if m else 'full'),
+            'angle': np.angle,
+            'real': np.real,
+            'imag': np.imag,
+            'conj': np.conj,
+            'linspace': np.linspace,
+            'logspace': np.logspace,
+            'find': lambda arr: np.where(arr)[0],
+            'max': lambda a: np.max(a) if hasattr(a, '__iter__') else max(a),
+            'min': lambda a: np.min(a) if hasattr(a, '__iter__') else min(a),
+            'sum': lambda a: np.sum(a) if hasattr(a, '__iter__') else sum(a),
+            'mean': lambda a: np.mean(a) if hasattr(a, '__iter__') else a,
+            'std': lambda a: np.std(a) if hasattr(a, '__iter__') else 0,
+            'stem': plt.stem,
+            'legend': plt.legend,
+            'xlim': plt.xlim,
+            'ylim': plt.ylim
         }
 
         # Translate MATLAB lines to Python
@@ -248,6 +312,8 @@ class OctaveRunner(BaseRunner):
             line = re.sub(r'\bylabel\(', 'plt.ylabel(', line)
             line = re.sub(r'\btitle\(', 'plt.title(', line)
             line = re.sub(r'\bfigure(\([0-9]*\))?', 'plt.figure()', line)
+            line = re.sub(r'\bsaveas\(', '_saveas_impl(', line)
+            line = re.sub(r'\bgcf\b', 'plt.gcf()', line)
 
             # Element-wise operators
             line = line.replace('.*', '*').replace('./', '/').replace('.^', '**')
@@ -262,21 +328,19 @@ class OctaveRunner(BaseRunner):
         stdout_capture = io.StringIO()
         stderr_capture = io.StringIO()
 
-        stdout_capture.write("% GNU Octave MATLAB Engine (Simulation Execution)\n")
-        stdout_capture.write(">> Initializing mathematical environment...\n")
-
         exit_code = 0
         error_summary = None
 
         with contextlib.redirect_stdout(stdout_capture), contextlib.redirect_stderr(stderr_capture):
             try:
                 exec(translated_code, ns)
-                stdout_capture.write(">> Program executed successfully.\n")
+                if not stdout_capture.getvalue().strip():
+                    stdout_capture.write("Program executed successfully.\n")
             except Exception as e:
                 import traceback
                 exit_code = 1
                 error_summary = str(e)
-                stderr_capture.write(f"MATLAB Execution Error: {str(e)}\n")
+                stderr_capture.write(f"Octave Execution Error: {str(e)}\n")
                 stderr_capture.write(traceback.format_exc())
 
         # Extract figures
@@ -308,18 +372,33 @@ class OctaveRunner(BaseRunner):
 
             figures.append({
                 "fig_index": idx,
+                "filename": f"figure_{idx}.png",
                 "svg_content": svg_path.read_text(encoding="utf-8") if svg_path.exists() else "",
                 "png_path": str(png_path) if png_path.exists() else None,
                 "plotly_traces": traces
             })
-            stdout_capture.write(f">> Figure {idx} captured ({len(traces)} traces).\n")
 
         plt.close('all')
 
+        # Also capture any specifically saved png files (e.g., saveas(gcf, 'sine_wave.png'))
+        for png_file in sorted(run_dir.glob("*.png")):
+            if not any(f.get("filename") == png_file.name or f.get("png_path") == str(png_file) for f in figures):
+                fig_idx = len(figures) + 1
+                figures.append({
+                    "fig_index": fig_idx,
+                    "filename": png_file.name,
+                    "svg_content": "",
+                    "png_path": str(png_file),
+                    "plotly_traces": []
+                })
+
         # Extract variables
         variables = {}
-        excluded_keys = ('np', 'plt', 'pi', 'sin', 'cos', 'tan', 'exp', 'log', 'log10', 'sqrt', 'abs',
-                         'zeros', 'ones', 'eye', 'length', 'size', 'disp', 'clc', 'clear', '__builtins__')
+        excluded_keys = ('np', 'plt', 'pi', 'sin', 'cos', 'tan', 'sinc', 'exp', 'log', 'log10', 'sqrt', 'abs',
+                         'zeros', 'ones', 'eye', 'length', 'size', 'disp', 'clc', 'clear', 'gcf', 'saveas',
+                         '_saveas_impl', 'fft', 'ifft', 'fftshift', 'conv', 'angle', 'real', 'imag', 'conj',
+                         'linspace', 'logspace', 'find', 'max', 'min', 'sum', 'mean', 'std', 'stem',
+                         'legend', 'xlim', 'ylim', '__builtins__')
         for k, v in ns.items():
             if k.startswith('_') or k in excluded_keys:
                 continue
@@ -352,6 +431,7 @@ class OctaveRunner(BaseRunner):
             duration_ms=duration_ms,
             figures=figures,
             variables=variables,
-            error=error_summary
+            error=error_summary,
+            run_dir=str(run_dir)
         )
 

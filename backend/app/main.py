@@ -25,8 +25,10 @@ app.add_middleware(
 app.include_router(api_router, prefix=settings.API_V1_STR)
 
 # Mount local storage for generated figures and PDF artifacts
-if os.path.exists(settings.STORAGE_DIR):
-    app.mount("/api/v1/storage", StaticFiles(directory=settings.STORAGE_DIR), name="storage")
+os.makedirs(settings.STORAGE_DIR, exist_ok=True)
+os.makedirs(os.path.join(settings.STORAGE_DIR, "artifacts"), exist_ok=True)
+os.makedirs(os.path.join(settings.STORAGE_DIR, "reports"), exist_ok=True)
+app.mount("/api/v1/storage", StaticFiles(directory=settings.STORAGE_DIR), name="storage")
 
 @app.on_event("startup")
 async def startup_event():
