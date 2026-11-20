@@ -36,6 +36,9 @@ class ExperimentDetailResponse(BaseModel):
     default_code: str
     engine: str
     expected_output: Optional[str]
+    matlab_code: Optional[str] = None
+    python_code: Optional[str] = None
+    viva_questions_json: Optional[List[Any]] = None
 
     class Config:
         from_attributes = True

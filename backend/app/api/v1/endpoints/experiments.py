@@ -30,6 +30,12 @@ async def get_experiment_by_slug(slug: str, db: AsyncSession = Depends(get_db)):
     repo = ExperimentRepository(db)
     exp = await repo.get_by_slug(slug)
     if not exp:
+        try:
+            exp_uuid = UUID(slug)
+            exp = await repo.get_by_id(exp_uuid)
+        except ValueError:
+            pass
+    if not exp:
         raise HTTPException(status_code=404, detail="Experiment not found.")
     return ExperimentDetailResponse.model_validate(exp)
 
@@ -41,6 +47,12 @@ async def clone_experiment_to_project(
 ):
     exp_repo = ExperimentRepository(db)
     exp = await exp_repo.get_by_slug(slug)
+    if not exp:
+        try:
+            exp_uuid = UUID(slug)
+            exp = await exp_repo.get_by_id(exp_uuid)
+        except ValueError:
+            pass
     if not exp:
         raise HTTPException(status_code=404, detail="Experiment not found.")
 
@@ -61,4 +73,23 @@ async def clone_experiment_to_project(
         entry = files[0]
         await file_repo.update_file(entry, content=exp.default_code)
 
+        # Create complementary comparison file for side-by-side MATLAB & Python evaluation
+        if exp.python_code and entry.name.endswith(".m"):
+            await file_repo.create_file(
+                project_id=project.id,
+                name="main_python.py",
+                path="/main_python.py",
+                content=exp.python_code,
+                is_entrypoint=False
+            )
+        elif exp.matlab_code and entry.name.endswith(".py"):
+            await file_repo.create_file(
+                project_id=project.id,
+                name="main_octave.m",
+                path="/main_octave.m",
+                content=exp.matlab_code,
+                is_entrypoint=False
+            )
+
+    await db.refresh(project, ["files"])
     return ProjectResponse.model_validate(project)

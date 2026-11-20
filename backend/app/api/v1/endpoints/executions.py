@@ -1,5 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 from typing import List
 from uuid import UUID
 import os
@@ -9,6 +11,7 @@ from app.core.database import get_db
 from app.core.config import settings
 from app.api.deps import get_current_user
 from app.models.user import User
+from app.models.execution import ExecutionArtifact
 from app.repositories.project_repo import ProjectRepository
 from app.repositories.file_repo import FileRepository
 from app.repositories.execution_repo import ExecutionRepository
@@ -142,3 +145,20 @@ async def list_project_executions(
     exec_repo = ExecutionRepository(db)
     executions = await exec_repo.list_by_project(project_id)
     return [ExecutionResponse.model_validate(e) for e in executions]
+
+@router.get("/artifacts/{artifact_id}/download")
+async def download_artifact(
+    artifact_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    art_stmt = select(ExecutionArtifact).where(ExecutionArtifact.id == artifact_id)
+    artifact = (await db.execute(art_stmt)).scalar_one_or_none()
+    if not artifact:
+        raise HTTPException(status_code=404, detail="Artifact not found.")
+
+    file_path = os.path.join(settings.STORAGE_DIR, "artifacts", artifact.storage_key)
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="Artifact file missing from storage.")
+
+    return FileResponse(file_path, media_type=artifact.mime_type, filename=artifact.filename)

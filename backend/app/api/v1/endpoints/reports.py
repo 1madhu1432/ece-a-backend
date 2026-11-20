@@ -9,8 +9,9 @@ from app.core.database import get_db
 from app.core.config import settings
 from app.api.deps import get_current_user
 from app.models.user import User, UserProfile
-from app.models.project import Project
-from app.models.execution import Execution, ExecutionResult
+from app.models.project import Project, ProjectFile
+from app.models.execution import Execution, ExecutionResult, ExecutionArtifact
+from app.models.experiment import Experiment
 from app.models.report import GeneratedReport
 from app.schemas.report import ReportGenerateRequest, GeneratedReportResponse
 from app.services.report_service import ReportGenerator
@@ -45,8 +46,33 @@ async def generate_report(
             if result:
                 exec_output = result.stdout + ("\n" + result.stderr if result.stderr else "")
 
+            # Load any figure artifacts generated in this execution
+            art_stmt = select(ExecutionArtifact).where(ExecutionArtifact.execution_id == execution.id)
+            artifacts = (await db.execute(art_stmt)).scalars().all()
+            for art in artifacts:
+                if art.filename.endswith(".png") or art.artifact_type.startswith("figure"):
+                    fig_path = os.path.join(settings.STORAGE_DIR, "artifacts", art.storage_key)
+                    if os.path.exists(fig_path):
+                        figures.append(fig_path)
+
+            if execution.file_id:
+                file_res = await db.execute(select(ProjectFile).where(ProjectFile.id == execution.file_id))
+                target_file = file_res.scalar_one_or_none()
+                if target_file:
+                    source_code = target_file.content
+
     if not source_code and project.files:
         source_code = project.files[0].content
+
+    # Determine real experiment metadata if linked
+    report_objective = project.description or f"Design, simulation and analysis of {req.title}."
+    report_theory = "The mathematical formulations and theoretical governing principles are simulated in this project."
+    if project.experiment_id:
+        exp_res = await db.execute(select(Experiment).where(Experiment.id == project.experiment_id))
+        linked_exp = exp_res.scalar_one_or_none()
+        if linked_exp:
+            report_objective = linked_exp.objective or report_objective
+            report_theory = linked_exp.theory or report_theory
 
     # Output file path
     report_filename = f"report_{project.id}_{int(os.times().system)}.pdf"
@@ -58,8 +84,8 @@ async def generate_report(
         college_name=college,
         roll_number=req.roll_number or "ECE-2024",
         experiment_title=req.title,
-        objective=project.description or f"Design, simulation and analysis of {req.title}.",
-        theory="The mathematical formulations and theoretical governing principles are simulated in this project.",
+        objective=report_objective,
+        theory=report_theory,
         source_code=source_code,
         execution_output=exec_output,
         figures=figures

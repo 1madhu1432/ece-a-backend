@@ -11,6 +11,23 @@ from datetime import datetime, timezone, timedelta
 async def init_database():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        def add_cols_if_missing(connection):
+            try:
+                cursor = connection.connection.cursor()
+                cursor.execute("PRAGMA table_info(experiments)")
+                existing = [row[1] for row in cursor.fetchall()]
+                if "matlab_code" not in existing:
+                    cursor.execute("ALTER TABLE experiments ADD COLUMN matlab_code TEXT")
+                if "python_code" not in existing:
+                    cursor.execute("ALTER TABLE experiments ADD COLUMN python_code TEXT")
+                if "viva_questions_json" not in existing:
+                    cursor.execute("ALTER TABLE experiments ADD COLUMN viva_questions_json JSON DEFAULT '[]'")
+            except Exception:
+                pass
+        try:
+            await conn.run_sync(add_cols_if_missing)
+        except Exception:
+            pass
 
     async with AsyncSessionLocal() as session:
         # 1. Seed Default Admin
@@ -87,11 +104,24 @@ async def init_database():
                 await session.flush()
             category_map[cat_data["code"]] = cat.id
 
-        # 4. Seed Experiments
+        # 4. Seed / Update Experiments
         for exp_data in EXPERIMENTS:
             res = await session.execute(select(Experiment).where(Experiment.slug == exp_data["slug"]))
-            if not res.scalar_one_or_none():
-                cat_id = category_map[exp_data["category_code"]]
+            existing_exp = res.scalar_one_or_none()
+            cat_id = category_map[exp_data["category_code"]]
+            if existing_exp:
+                existing_exp.title = exp_data["title"]
+                existing_exp.objective = exp_data["objective"]
+                existing_exp.theory = exp_data["theory"]
+                existing_exp.equations_json = exp_data["equations_json"]
+                existing_exp.procedure_json = exp_data["procedure_json"]
+                existing_exp.default_code = exp_data["default_code"]
+                existing_exp.engine = exp_data["engine"]
+                existing_exp.expected_output = exp_data["expected_output"]
+                existing_exp.matlab_code = exp_data.get("matlab_code")
+                existing_exp.python_code = exp_data.get("python_code")
+                existing_exp.viva_questions_json = exp_data.get("viva_questions_json", [])
+            else:
                 exp = Experiment(
                     category_id=cat_id,
                     title=exp_data["title"],
@@ -102,7 +132,10 @@ async def init_database():
                     procedure_json=exp_data["procedure_json"],
                     default_code=exp_data["default_code"],
                     engine=exp_data["engine"],
-                    expected_output=exp_data["expected_output"]
+                    expected_output=exp_data["expected_output"],
+                    matlab_code=exp_data.get("matlab_code"),
+                    python_code=exp_data.get("python_code"),
+                    viva_questions_json=exp_data.get("viva_questions_json", [])
                 )
                 session.add(exp)
 

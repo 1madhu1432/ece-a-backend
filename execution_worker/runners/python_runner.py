@@ -26,6 +26,10 @@ def _serialize_val(val):
         if val.size < 50:
             return val.tolist()
         return f"Array shape {val.shape}, dtype {val.dtype}"
+    elif hasattr(val, 'to_dict') and hasattr(val, 'shape'):
+        return f"DataFrame {val.shape[0]} rows x {val.shape[1]} cols"
+    elif hasattr(val, 'free_symbols'):
+        return str(val)
     elif isinstance(val, (list, tuple)):
         return [str(v) for v in val[:20]]
     elif isinstance(val, dict):
@@ -41,6 +45,7 @@ try:
 except Exception as e:
     import traceback
     traceback.print_exc()
+    sys.exit(1)
 
 # 1. Capture Figures
 _figures_meta = []
@@ -85,6 +90,12 @@ for k, v in _user_ns.items():
     if isinstance(v, np.ndarray):
         var_type = f"ndarray ({v.dtype})"
         var_size = "x".join(map(str, v.shape))
+    elif hasattr(v, 'shape') and hasattr(v, 'columns'):
+        var_type = "DataFrame"
+        var_size = f"{v.shape[0]}x{v.shape[1]}"
+    elif hasattr(v, 'free_symbols'):
+        var_type = "SymPy Expr"
+        var_size = "1x1"
     elif isinstance(v, (list, tuple)):
         var_size = f"1x{len(v)}"
     _vars_meta[k] = {
@@ -118,12 +129,20 @@ class PythonRunner(BaseRunner):
 
         python_bin = sys.executable
 
+        # Prepare sanitized execution environment without backend secrets
+        allowed_keys = {"PATH", "SYSTEMROOT", "WINDIR", "TEMP", "TMP", "USERPROFILE", "LANG", "LC_ALL", "PYTHONPATH"}
+        safe_env = {k: v for k, v in os.environ.items() if k in allowed_keys}
+        safe_env["PYTHONUNBUFFERED"] = "1"
+        safe_env["MPLBACKEND"] = "Agg"
+        safe_env["OPENBLAS_NUM_THREADS"] = "2"
+
         try:
             # Run sandboxed subprocess
             proc = await asyncio.create_subprocess_exec(
                 python_bin,
                 "wrapper.py",
                 cwd=str(run_dir),
+                env=safe_env,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE
             )
@@ -143,7 +162,8 @@ class PythonRunner(BaseRunner):
                     stderr="Execution timed out after 15 seconds. Please check for infinite loops.",
                     exit_code=-1,
                     duration_ms=duration_ms,
-                    error="TIMEOUT"
+                    error="TIMEOUT",
+                    run_dir=str(run_dir)
                 )
 
             duration_ms = int((time.perf_counter() - start_time) * 1000)
@@ -166,6 +186,7 @@ class PythonRunner(BaseRunner):
                         svg_content = svg_p.read_text(encoding="utf-8") if svg_p.exists() else ""
                         figures.append({
                             "fig_index": fig_info["fig_index"],
+                            "filename": png_p.name,
                             "svg_content": svg_content,
                             "png_path": str(png_p) if png_p.exists() else None,
                             "plotly_traces": fig_info.get("plotly_traces", [])
@@ -175,13 +196,26 @@ class PythonRunner(BaseRunner):
                 except Exception as e:
                     stderr_str += f"\nError parsing simulation metadata: {str(e)}"
 
+            # Also discover any user-saved PNG files (e.g. plt.savefig('custom.png'))
+            for png_file in sorted(run_dir.glob("*.png")):
+                if not any(f.get("filename") == png_file.name or f.get("png_path") == str(png_file) for f in figures):
+                    fig_idx = len(figures) + 1
+                    figures.append({
+                        "fig_index": fig_idx,
+                        "filename": png_file.name,
+                        "svg_content": "",
+                        "png_path": str(png_file),
+                        "plotly_traces": []
+                    })
+
             return ExecutionResultPayload(
                 stdout=stdout_str,
                 stderr=stderr_str,
                 exit_code=exit_code,
                 duration_ms=duration_ms,
                 figures=figures,
-                variables=variables
+                variables=variables,
+                run_dir=str(run_dir)
             )
 
         finally:

@@ -26,6 +26,9 @@ class Experiment(TimeStampedModel):
     default_code = Column(Text, nullable=False)
     engine = Column(String(20), nullable=False, default="octave")
     expected_output = Column(Text, nullable=True)
+    matlab_code = Column(Text, nullable=True)
+    python_code = Column(Text, nullable=True)
+    viva_questions_json = Column(JSON, nullable=True, default=list)
 
     category = relationship("ExperimentCategory", back_populates="experiments")
     projects = relationship("Project", back_populates="experiment")
