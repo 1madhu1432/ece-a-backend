@@ -1435,3 +1435,11 @@ DSP_EXPERIMENTS = [
         ]
     }
 ]
+
+# Ensure 100% MATLAB / GNU Octave configuration for all experiments
+for _exp in DSP_EXPERIMENTS:
+    _exp["engine"] = "octave"
+    if "matlab_code" in _exp:
+        _exp["default_code"] = _exp["matlab_code"]
+    _exp.pop("python_code", None)
+

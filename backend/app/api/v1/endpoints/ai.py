@@ -80,7 +80,7 @@ async def ai_chat(
         prompt=req.prompt,
         agent_role=req.agent_role,
         subject=req.subject,
-        language=req.language or "python",
+        language=req.language or "octave",
         conversation_history=chat_history,
         active_code=req.active_code,
         selected_code=req.selected_code,

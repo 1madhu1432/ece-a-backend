@@ -80,8 +80,8 @@ async def test_ai_chat_across_all_8_ece_subjects():
             assert data["tokens_consumed"] > 0
 
 @pytest.mark.asyncio
-async def test_ai_code_generation_octave_and_python():
-    """Verify code generation for both GNU Octave (.m) and Python (.py)."""
+async def test_ai_code_generation_matlab():
+    """Verify MATLAB/GNU Octave code generation."""
     await init_database()
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://127.0.0.1:8000") as client:
@@ -102,7 +102,7 @@ async def test_ai_code_generation_octave_and_python():
         token = login_resp.json()["access_token"]
         headers = {"Authorization": f"Bearer {token}"}
 
-        # 1. Octave Code Generation
+        # Octave/MATLAB Code Generation
         oct_resp = await client.post("/api/v1/ai/chat", json={
             "prompt": "Generate GNU Octave code for a 5 Hz sine wave sampled at 100 Hz and plot it.",
             "language": "octave",
@@ -115,19 +115,6 @@ async def test_ai_code_generation_octave_and_python():
         assert "plot" in oct_data["content"] or (oct_data["suggested_code"] and "plot" in oct_data["suggested_code"])
         assert oct_data["suggested_code"] is not None
         assert "sin" in oct_data["suggested_code"]
-
-        # 2. Python Code Generation
-        py_resp = await client.post("/api/v1/ai/chat", json={
-            "prompt": "Generate Python NumPy and Matplotlib code for computing FFT and power spectral density.",
-            "language": "python",
-            "agent_role": "Coding Agent",
-            "subject": "Digital Signal Processing"
-        }, headers=headers)
-
-        assert py_resp.status_code == 200
-        py_data = py_resp.json()
-        assert "numpy" in py_data["content"].lower() or (py_data["suggested_code"] and "numpy" in py_data["suggested_code"].lower())
-        assert py_data["suggested_code"] is not None
 
 @pytest.mark.asyncio
 async def test_ai_selected_code_explanation():
@@ -152,12 +139,12 @@ async def test_ai_selected_code_explanation():
         token = login_resp.json()["access_token"]
         headers = {"Authorization": f"Bearer {token}"}
 
-        selected = "b, a = signal.butter(4, 0.2, btype='low')"
+        selected = "[b, a] = butter(4, 0.2, 'low');"
         resp = await client.post("/api/v1/ai/chat", json={
             "prompt": "Explain what this filter function is doing.",
             "selected_code": selected,
-            "active_code": f"import scipy.signal as signal\n{selected}\nw, h = signal.freqz(b, a)",
-            "language": "python",
+            "active_code": f"{selected}\n[h, w] = freqz(b, a);",
+            "language": "octave",
             "agent_role": "ECE Tutor",
             "subject": "Digital Signal Processing"
         }, headers=headers)
@@ -190,13 +177,13 @@ async def test_ai_runtime_error_debugging_and_suggested_code():
         headers = {"Authorization": f"Bearer {token}"}
 
         error_trace = "ZeroDivisionError: float division by zero in line 5"
-        buggy_code = "t = np.linspace(0, 1, 100)\nf = 0\ny = 1 / f\nplt.plot(t, y)"
+        buggy_code = "t = 0:0.01:1;\nf = 0;\ny = 1 / f;\nplot(t, y);"
 
         resp = await client.post("/api/v1/ai/chat", json={
             "prompt": "My simulation crashed with this error. Please diagnose and provide the fix.",
             "last_error": error_trace,
             "active_code": buggy_code,
-            "language": "python",
+            "language": "octave",
             "agent_role": "Debugging Agent",
             "subject": "Digital Signal Processing"
         }, headers=headers)
@@ -237,7 +224,8 @@ async def test_ai_context_sharing_with_experiment_and_graph():
             "execution_output": ">> Fs = 100 Hz, Fmax = 10 Hz, Aliasing = False",
             "graph_metadata": "Generated 2 plot artifacts: sampled_signal.png, reconstructed_signal.png",
             "agent_role": "Simulation Agent",
-            "subject": "Signals and Systems"
+            "subject": "Signals and Systems",
+            "language": "octave"
         }, headers=headers)
 
         assert resp.status_code == 200

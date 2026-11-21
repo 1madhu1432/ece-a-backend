@@ -5,17 +5,22 @@ from app.ai.providers.base import AgentChatMessage, AgentResponse
 class ECEKnowledgeEngine:
     """
     Core Domain Intelligence Engine for Electronics & Communication Engineering (ECE).
-    Provides deep, syllabus-compliant engineering assistance, code generation (Octave & Python),
+    Provides deep, syllabus-compliant engineering assistance, code generation (MATLAB/GNU Octave),
     root-cause error diagnosis, and viva question drills across 8 undergraduate subjects.
     """
 
     SUBJECT_DISCIPLINES = [
         "Digital Signal Processing",
+        "Communication Systems",
+        "Control Systems",
+        "VLSI",
+        "Digital Electronics",
+        "Analog Electronics",
+        "Power Electronics",
+        "Embedded Systems",
         "Analog and Digital Communication",
         "Signals and Systems",
-        "Control Systems",
         "Electronic Devices and Circuits",
-        "Digital Electronics",
         "Microprocessors and Microcontrollers",
         "Electromagnetic Theory"
     ]
@@ -34,7 +39,7 @@ class ECEKnowledgeEngine:
         prompt: str,
         agent_role: str = "ECE Tutor",
         subject: Optional[str] = None,
-        language: str = "python",
+        language: str = "octave",
         active_code: Optional[str] = None,
         selected_code: Optional[str] = None,
         last_error: Optional[str] = None,
@@ -45,7 +50,7 @@ class ECEKnowledgeEngine:
         history: Optional[List[AgentChatMessage]] = None
     ) -> AgentResponse:
         p_lower = prompt.lower()
-        lang = "octave" if ("octave" in p_lower or "matlab" in p_lower or language == "octave") else "python"
+        lang = "octave"
 
         # -------------------------------------------------------------
         # 1. DEBUGGING & RUNTIME ERROR DIAGNOSIS
@@ -62,13 +67,20 @@ class ECEKnowledgeEngine:
             return cls._explain_code_snippet(code_to_explain, lang)
 
         # -------------------------------------------------------------
-        # 3. EXPERIMENT VIVA PREPARATION
+        # 3. ALGORITHM OPTIMIZATION & VECTORIZATION
         # -------------------------------------------------------------
-        if "viva" in p_lower or "questions" in p_lower or agent_role == "Viva Voce Coach" or agent_role == "Viva Prep Specialist":
-            return cls._generate_viva_prep(prompt, experiment_title, subject)
+        if "optimize" in p_lower or "vectoriz" in p_lower or agent_role == "Algorithm Optimizer":
+            code_to_opt = selected_code or active_code or prompt
+            return cls._optimize_code_snippet(code_to_opt, lang)
 
         # -------------------------------------------------------------
-        # 4. CODE GENERATION BY TOPIC (prioritized over general plot interpretation)
+        # 4. MATHEMATICAL MODELING & IMPLEMENTATION
+        # -------------------------------------------------------------
+        if "math" in p_lower or "model" in p_lower or "equation" in p_lower or agent_role == "Mathematical Modeler":
+            return cls._generate_math_implementation(prompt, subject)
+
+        # -------------------------------------------------------------
+        # 5. CODE GENERATION BY TOPIC (prioritized over general plot interpretation)
         # -------------------------------------------------------------
         if (
             agent_role == "Coding Agent"
@@ -95,8 +107,11 @@ class ECEKnowledgeEngine:
             return cls._explain_simulation_results(prompt, graph_metadata, execution_output, experiment_title, experiment_theory)
 
         # -------------------------------------------------------------
-        # 6. CONCEPTUAL ENGINEERING TUTOR (8 CORE SUBJECTS)
+        # 6. CONCEPTUAL ENGINEERING TUTOR / VIVA DRILLS
         # -------------------------------------------------------------
+        if "viva" in p_lower or "questions" in p_lower:
+            return cls._generate_viva_prep(prompt, experiment_title, subject)
+
         return cls._explain_engineering_concept(prompt, subject)
 
     @classmethod
@@ -112,86 +127,53 @@ class ECEKnowledgeEngine:
                 "The code attempted to divide an array or scalar by zero. In signal processing, this often occurs when "
                 "evaluating sinc functions $\\frac{\\sin(\\pi t)}{\\pi t}$ at $t=0$, or setting frequency parameters $f=0$."
             )
-            if lang == "python":
-                fix_code = (
-                    "import numpy as np\n"
-                    "import matplotlib.pyplot as plt\n\n"
-                    "# Avoid division by zero by adding eps or setting non-zero denominator\n"
-                    "eps = 1e-12\n"
-                    "t = np.linspace(0, 1, 500)\n"
-                    "f = 5.0  # Set valid non-zero frequency\n"
-                    "y = np.sin(2 * np.pi * f * t) / (f + eps)\n\n"
-                    "plt.figure(figsize=(8, 4))\n"
-                    "plt.plot(t, y, 'b-', label='Stabilized Signal')\n"
-                    "plt.title('Corrected Simulation (No Division by Zero)')\n"
-                    "plt.xlabel('Time (s)'); plt.ylabel('Amplitude'); plt.grid(True)\n"
-                    "plt.savefig('corrected_plot.png')\n"
-                    "print('Execution completed without errors.')\n"
-                )
-            else:
-                fix_code = (
-                    "% Corrected GNU Octave Script\n"
-                    "clear all; close all; clc;\n"
-                    "eps_val = 1e-12;\n"
-                    "t = 0:0.002:1;\n"
-                    "f = 5.0;\n"
-                    "y = sin(2*pi*f*t) ./ (f + eps_val);\n"
-                    "figure(1);\n"
-                    "plot(t, y, 'b-'); grid on;\n"
-                    "title('Corrected Simulation (No Division by Zero)');\n"
-                    "xlabel('Time (s)'); ylabel('Amplitude');\n"
-                    "disp('Octave execution successful without zero division');\n"
-                )
+            fix_code = (
+                "% Corrected GNU Octave Script\n"
+                "clear all; close all; clc;\n"
+                "eps_val = 1e-12;\n"
+                "t = 0:0.002:1;\n"
+                "f = 5.0;\n"
+                "y = sin(2*pi*f*t) ./ (f + eps_val);\n"
+                "figure(1);\n"
+                "plot(t, y, 'b-'); grid on;\n"
+                "title('Corrected Simulation (No Division by Zero)');\n"
+                "xlabel('Time (s)'); ylabel('Amplitude');\n"
+                "disp('Octave execution successful without zero division');\n"
+            )
 
         elif "IndexError" in error_text or "out of bound" in error_text or "subscript indices" in error_text:
             root_cause = "Indexing Out of Bounds / Off-by-one."
             explanation = (
-                "Array index exceeded available dimensions. Note that MATLAB/Octave is 1-indexed (indices start at 1), "
-                "whereas Python is 0-indexed (indices start at 0 and end at length-1)."
+                "Array index exceeded available dimensions. Note that MATLAB/Octave is strictly 1-indexed (indices start at 1 "
+                "and end at length(data)). 0-indexing will trigger an out-of-bounds index error."
             )
-            if lang == "python":
-                fix_code = (
-                    "import numpy as np\n\n"
-                    "data = np.array([10, 20, 30, 40, 50])\n"
-                    "# Use valid 0-based indexing within len(data)\n"
-                    "for i in range(len(data)):\n"
-                    "    print(f'Index {i} -> Value {data[i]}')\n"
-                )
-            else:
-                fix_code = (
-                    "% Corrected 1-based indexing in GNU Octave\n"
-                    "data = [10, 20, 30, 40, 50];\n"
-                    "for i = 1:length(data)\n"
-                    "    printf('Index %d -> Value %d\\n', i, data(i));\n"
-                    "endfor\n"
-                )
+            fix_code = (
+                "% Corrected 1-based indexing in GNU Octave\n"
+                "clear all; clc;\n"
+                "data = [10, 20, 30, 40, 50];\n"
+                "for i = 1:length(data)\n"
+                "    printf('Index %d -> Value %d\\n', i, data(i));\n"
+                "endfor\n"
+            )
 
-        elif "ValueError: shapes" in error_text or "dimensions" in error_text or "nonconformant" in error_text:
+        elif "ValueError: shapes" in error_text or "dimensions" in error_text or "nonconformant" in error_text or "operator *" in error_text:
             root_cause = "Matrix/Array Dimension Mismatch."
             explanation = (
                 "An element-wise or matrix operation failed because vector dimensions did not match. "
-                "In Octave, verify use of `.*` (element-wise) instead of `*` (matrix multiply). In Python NumPy, ensure array shapes broadcast correctly."
+                "In Octave/MATLAB, verify use of `.*` (element-wise) instead of `*` (matrix multiply)."
             )
-            if lang == "python":
-                fix_code = (
-                    "import numpy as np\n"
-                    "t = np.linspace(0, 1, 100)\n"
-                    "carrier = np.cos(2 * np.pi * 10 * t)\n"
-                    "modulator = np.sin(2 * np.pi * 2 * t)\n"
-                    "# Element-wise multiplication with congruent shapes (100,)\n"
-                    "am_signal = carrier * modulator\n"
-                    "print('Shape aligned successfully:', am_signal.shape)\n"
-                )
-            else:
-                fix_code = (
-                    "% Vectorized element-wise operation in Octave\n"
-                    "t = 0:0.01:1;\n"
-                    "carrier = cos(2*pi*10*t);\n"
-                    "modulator = sin(2*pi*2*t);\n"
-                    "% Use .* for element-wise multiplication\n"
-                    "am_signal = carrier .* modulator;\n"
-                    "disp('Multiplication succeeded.');\n"
-                )
+            fix_code = (
+                "% Vectorized element-wise operation in Octave\n"
+                "clear all; close all; clc;\n"
+                "t = 0:0.01:1;\n"
+                "carrier = cos(2*pi*10*t);\n"
+                "modulator = sin(2*pi*2*t);\n"
+                "% Use .* for element-wise multiplication\n"
+                "am_signal = carrier .* modulator;\n"
+                "figure(1); plot(t, am_signal, 'b-'); grid on;\n"
+                "title('Conformant Element-Wise Signal');\n"
+                "disp('Multiplication succeeded.');\n"
+            )
         else:
             root_cause = "Syntax or Runtime Parameter Error."
             explanation = (
@@ -202,14 +184,14 @@ class ECEKnowledgeEngine:
                 fix_code = active_code.strip() + "\n% [AI Assistant]: Checked syntax and parameters.\n"
             else:
                 fix_code = (
-                    "import numpy as np\n"
-                    "import matplotlib.pyplot as plt\n\n"
-                    "t = np.linspace(0, 1, 200)\n"
-                    "x = np.sin(2 * np.pi * 5 * t)\n"
-                    "plt.plot(t, x)\n"
-                    "plt.title('Corrected Baseline Simulation')\n"
-                    "plt.grid(True)\n"
-                    "plt.savefig('baseline_output.png')\n"
+                    "% Corrected Baseline MATLAB/Octave Script\n"
+                    "clear all; close all; clc;\n"
+                    "t = 0:0.005:1;\n"
+                    "x = sin(2*pi*5*t);\n"
+                    "figure(1); plot(t, x, 'b-', 'LineWidth', 1.5); grid on;\n"
+                    "title('Corrected Baseline Simulation');\n"
+                    "xlabel('Time (s)'); ylabel('Amplitude');\n"
+                    "disp('Simulation executed successfully.');\n"
                 )
 
         content = (
@@ -326,186 +308,89 @@ class ECEKnowledgeEngine:
 
     @classmethod
     def _generate_engineering_code(cls, prompt: str, lang: str, subject: Optional[str]) -> AgentResponse:
-        """Generate verified, production-quality engineering scripts."""
+        """Generate verified, production-quality MATLAB / GNU Octave engineering scripts."""
         p_lower = prompt.lower()
         code = ""
         topic_desc = "Simulation Routine"
 
         if "butterworth" in p_lower or "filter" in p_lower:
             topic_desc = "Butterworth Lowpass Filter Design"
-            if lang == "python":
-                code = (
-                    "import numpy as np\n"
-                    "import scipy.signal as signal\n"
-                    "import matplotlib.pyplot as plt\n\n"
-                    "# 1. Parameters\n"
-                    "fs = 1000            # Sampling frequency (Hz)\n"
-                    "fc = 50              # Cutoff frequency (Hz)\n"
-                    "order = 4            # Filter order\n"
-                    "nyq = 0.5 * fs\n\n"
-                    "# 2. Design Butterworth filter\n"
-                    "b, a = signal.butter(order, fc / nyq, btype='low')\n"
-                    "w, h = signal.freqz(b, a, worN=1024)\n"
-                    "freqs = (w / np.pi) * nyq\n\n"
-                    "# 3. Plot Frequency Response\n"
-                    "plt.figure(figsize=(8, 4))\n"
-                    "plt.plot(freqs, 20 * np.log10(np.abs(h)), 'b', lw=1.5)\n"
-                    "plt.axvline(fc, color='r', linestyle='--', label=f'Cutoff fc = {fc} Hz')\n"
-                    "plt.axhline(-3, color='k', linestyle=':', label='-3 dB Point')\n"
-                    "plt.title('Butterworth Lowpass Filter Magnitude Response')\n"
-                    "plt.xlabel('Frequency (Hz)'); plt.ylabel('Magnitude (dB)'); plt.grid(True)\n"
-                    "plt.legend(); plt.ylim([-60, 5])\n"
-                    "plt.savefig('butterworth_filter.png')\n"
-                    "print(f'Filter Order: {order}, 3dB Cutoff: {fc} Hz synthesized successfully.')\n"
-                )
-            else:
-                code = (
-                    "% Butterworth Lowpass Filter in GNU Octave\n"
-                    "clear all; close all; clc;\n"
-                    "fs = 1000; fc = 50; order = 4;\n"
-                    "[b, a] = butter(order, fc / (fs/2), 'low');\n"
-                    "[h, w] = freqz(b, a, 1024);\n"
-                    "freqs = (w / pi) * (fs / 2);\n"
-                    "figure(1);\n"
-                    "plot(freqs, 20*log10(abs(h)), 'b', 'LineWidth', 1.5); grid on;\n"
-                    "title('Butterworth Filter Response (GNU Octave)');\n"
-                    "xlabel('Frequency (Hz)'); ylabel('Magnitude (dB)');\n"
-                    "disp('Butterworth filter design complete.');\n"
-                )
+            code = (
+                "% Butterworth Lowpass Filter in GNU Octave / MATLAB\n"
+                "clear all; close all; clc;\n"
+                "fs = 1000; fc = 50; order = 4;\n"
+                "[b, a] = butter(order, fc / (fs/2), 'low');\n"
+                "[h, w] = freqz(b, a, 1024);\n"
+                "freqs = (w / pi) * (fs / 2);\n"
+                "figure(1);\n"
+                "plot(freqs, 20*log10(abs(h)), 'b', 'LineWidth', 1.5); grid on;\n"
+                "title('Butterworth Filter Response (GNU Octave)');\n"
+                "xlabel('Frequency (Hz)'); ylabel('Magnitude (dB)');\n"
+                "disp('Butterworth filter design complete.');\n"
+            )
         elif "convolution" in p_lower:
             topic_desc = "Discrete Linear Convolution"
-            if lang == "python":
-                code = (
-                    "import numpy as np\n"
-                    "import matplotlib.pyplot as plt\n\n"
-                    "x = np.array([1, 2, 3, 2, 1])\n"
-                    "h = np.array([1, 1, 1])\n"
-                    "y = np.convolve(x, h)\n\n"
-                    "plt.figure(figsize=(8, 3.5))\n"
-                    "plt.stem(range(len(y)), y, 'r', basefmt=' ')\n"
-                    "plt.title('Linear Convolution Result y[n] = x[n] * h[n]')\n"
-                    "plt.xlabel('Sample Index n'); plt.ylabel('Amplitude'); plt.grid(True)\n"
-                    "plt.savefig('convolution_plot.png')\n"
-                    "print('y[n] =', y.tolist())\n"
-                )
-            else:
-                code = (
-                    "% Linear Convolution in GNU Octave\n"
-                    "clear all; close all; clc;\n"
-                    "x = [1, 2, 3, 2, 1]; h = [1, 1, 1];\n"
-                    "y = conv(x, h);\n"
-                    "figure(1); stem(0:length(y)-1, y, 'r', 'filled'); grid on;\n"
-                    "title('Linear Convolution y[n]'); xlabel('Sample n'); ylabel('y[n]');\n"
-                    "disp('Convolution result y:'); disp(y);\n"
-                )
+            code = (
+                "% Linear Convolution in GNU Octave / MATLAB\n"
+                "clear all; close all; clc;\n"
+                "x = [1, 2, 3, 2, 1]; h = [1, 1, 1];\n"
+                "y = conv(x, h);\n"
+                "figure(1); stem(0:length(y)-1, y, 'r', 'filled'); grid on;\n"
+                "title('Linear Convolution y[n]'); xlabel('Sample n'); ylabel('y[n]');\n"
+                "disp('Convolution result y:'); disp(y);\n"
+            )
         elif "fft" in p_lower or "psd" in p_lower or "power spectral density" in p_lower:
             topic_desc = "Fast Fourier Transform & Power Spectral Density"
-            if lang == "python":
-                code = (
-                    "import numpy as np\n"
-                    "import matplotlib.pyplot as plt\n\n"
-                    "# 1. Signal Parameters\n"
-                    "fs = 1000            # Sampling rate (Hz)\n"
-                    "N = 1024             # FFT size\n"
-                    "t = np.arange(N) / fs\n"
-                    "x = np.sin(2 * np.pi * 50 * t) + 0.5 * np.sin(2 * np.pi * 120 * t)\n\n"
-                    "# 2. FFT Computation\n"
-                    "X = np.fft.fft(x)\n"
-                    "freqs = np.fft.fftfreq(N, 1 / fs)[:N // 2]\n"
-                    "psd = (1 / (fs * N)) * np.abs(X[:N // 2]) ** 2\n\n"
-                    "# 3. Plot PSD\n"
-                    "plt.figure(figsize=(8, 4))\n"
-                    "plt.plot(freqs, 10 * np.log10(psd + 1e-12), 'r', lw=1.5)\n"
-                    "plt.title('Power Spectral Density (PSD)')\n"
-                    "plt.xlabel('Frequency (Hz)'); plt.ylabel('Power/Frequency (dB/Hz)'); plt.grid(True)\n"
-                    "plt.savefig('fft_psd_plot.png')\n"
-                    "print('FFT and PSD computed successfully.')\n"
-                )
-            else:
-                code = (
-                    "% FFT and Power Spectral Density in GNU Octave\n"
-                    "clear all; close all; clc;\n"
-                    "fs = 1000; N = 1024; t = (0:N-1) / fs;\n"
-                    "x = sin(2*pi*50*t) + 0.5*sin(2*pi*120*t);\n"
-                    "X = fft(x);\n"
-                    "freqs = (0:N/2-1)*(fs/N);\n"
-                    "psd = (1/(fs*N)) * abs(X(1:N/2)).^2;\n"
-                    "figure(1); plot(freqs, 10*log10(psd + 1e-12), 'r', 'LineWidth', 1.5); grid on;\n"
-                    "title('Power Spectral Density (GNU Octave)');\n"
-                    "xlabel('Frequency (Hz)'); ylabel('Power/Frequency (dB/Hz)');\n"
-                    "disp('FFT analysis complete.');\n"
-                )
+            code = (
+                "% FFT and Power Spectral Density in GNU Octave / MATLAB\n"
+                "clear all; close all; clc;\n"
+                "fs = 1000; N = 1024; t = (0:N-1) / fs;\n"
+                "x = sin(2*pi*50*t) + 0.5*sin(2*pi*120*t);\n"
+                "X = fft(x);\n"
+                "freqs = (0:N/2-1)*(fs/N);\n"
+                "psd = (1/(fs*N)) * abs(X(1:N/2)).^2;\n"
+                "figure(1); plot(freqs, 10*log10(psd + 1e-12), 'r', 'LineWidth', 1.5); grid on;\n"
+                "title('Power Spectral Density (GNU Octave)');\n"
+                "xlabel('Frequency (Hz)'); ylabel('Power/Frequency (dB/Hz)');\n"
+                "disp('FFT analysis complete.');\n"
+            )
         elif "modulation" in p_lower or re.search(r"\bam\b", p_lower) or "dsb" in p_lower:
             topic_desc = "Amplitude Modulation (DSB-FC)"
-            if lang == "python":
-                code = (
-                    "import numpy as np\n"
-                    "import matplotlib.pyplot as plt\n\n"
-                    "fs = 10000; t = np.linspace(0, 0.05, 500)\n"
-                    "fm, fc = 100, 1000\n"
-                    "mu = 0.7  # 70% Modulation index\n"
-                    "m = np.cos(2 * np.pi * fm * t)\n"
-                    "c = np.cos(2 * np.pi * fc * t)\n"
-                    "s_am = (1 + mu * m) * c\n\n"
-                    "plt.figure(figsize=(8, 4))\n"
-                    "plt.plot(t * 1000, s_am, 'b', label='AM Waveform')\n"
-                    "plt.plot(t * 1000, 1 + mu * m, 'r--', label='Envelope')\n"
-                    "plt.title(f'Amplitude Modulation (mu = {mu})')\n"
-                    "plt.xlabel('Time (ms)'); plt.ylabel('Amplitude'); plt.grid(True)\n"
-                    "plt.legend(); plt.savefig('am_waveform.png')\n"
-                    "print('AM simulation generated successfully.')\n"
-                )
-            else:
-                code = (
-                    "% Amplitude Modulation in GNU Octave\n"
-                    "clear all; close all; clc;\n"
-                    "fs = 10000; t = 0:1/fs:0.05;\n"
-                    "fm = 100; fc = 1000; mu = 0.7;\n"
-                    "s_am = (1 + mu*cos(2*pi*fm*t)) .* cos(2*pi*fc*t);\n"
-                    "figure(1); plot(t*1000, s_am, 'b'); grid on;\n"
-                    "title('Amplitude Modulated Waveform');\n"
-                    "xlabel('Time (ms)'); ylabel('Amplitude');\n"
-                    "disp('AM modulation complete.');\n"
-                )
+            code = (
+                "% Amplitude Modulation in GNU Octave / MATLAB\n"
+                "clear all; close all; clc;\n"
+                "fs = 10000; t = 0:1/fs:0.05;\n"
+                "fm = 100; fc = 1000; mu = 0.7;\n"
+                "s_am = (1 + mu*cos(2*pi*fm*t)) .* cos(2*pi*fc*t);\n"
+                "figure(1); plot(t*1000, s_am, 'b'); grid on;\n"
+                "title('Amplitude Modulated Waveform');\n"
+                "xlabel('Time (ms)'); ylabel('Amplitude');\n"
+                "disp('AM modulation complete.');\n"
+            )
         else:
             topic_desc = "Sinusoidal Signal Synthesis"
-            if lang == "python":
-                code = (
-                    "import numpy as np\n"
-                    "import matplotlib.pyplot as plt\n\n"
-                    "f = 5; fs = 200\n"
-                    "t = np.linspace(0, 1, fs, endpoint=False)\n"
-                    "x = np.sin(2 * np.pi * f * t)\n\n"
-                    "plt.figure(figsize=(8, 3.5))\n"
-                    "plt.plot(t, x, 'g-', lw=1.5)\n"
-                    "plt.title(f'Synthesized Sine Wave ({f} Hz)')\n"
-                    "plt.xlabel('Time (s)'); plt.ylabel('Amplitude'); plt.grid(True)\n"
-                    "plt.savefig('sine_wave.png')\n"
-                    "print('Sine wave simulated successfully.')\n"
-                )
-            else:
-                code = (
-                    "% Sine Wave in GNU Octave\n"
-                    "clear all; close all; clc;\n"
-                    "f = 5; fs = 200; t = 0:1/fs:1;\n"
-                    "x = sin(2*pi*f*t);\n"
-                    "figure(1); plot(t, x, 'g', 'LineWidth', 1.5); grid on;\n"
-                    "title('Synthesized Sine Wave (GNU Octave)');\n"
-                    "xlabel('Time (s)'); ylabel('Amplitude');\n"
-                    "disp('Octave execution successful');\n"
-                )
+            code = (
+                "% Sine Wave in GNU Octave / MATLAB\n"
+                "clear all; close all; clc;\n"
+                "f = 5; fs = 200; t = 0:1/fs:1;\n"
+                "x = sin(2*pi*f*t);\n"
+                "figure(1); plot(t, x, 'g', 'LineWidth', 1.5); grid on;\n"
+                "title('Synthesized Sine Wave (GNU Octave)');\n"
+                "xlabel('Time (s)'); ylabel('Amplitude');\n"
+                "disp('Octave execution successful');\n"
+            )
 
         content = (
-            f"### ⚡ Generated {lang.upper()} Engineering Program\n"
+            f"### ⚡ Generated MATLAB / GNU Octave Program\n"
             f"**Application:** {topic_desc}\n\n"
-            f"Here is the verified, standalone code designed for the ECE AI Studio execution engine:\n\n"
-            f"```{lang}\n"
+            f"Here is the verified, standalone `.m` code designed for the ECE AI Studio execution engine:\n\n"
+            f"```octave\n"
             f"{code}\n"
             f"```\n\n"
             f"**Key Engineering Highlights:**\n"
-            f"- Fully vectorized computation without slow interpreter loops.\n"
-            f"- Proper sampling frequency respect of the Nyquist limit.\n"
-            f"- Generates downloadable PNG simulation figure.\n\n"
+            f"- Fully vectorized MATLAB computation without slow interpreter loops.\n"
+            f"- Proper sampling frequency respecting the Nyquist limit ($f_s \\ge 2 f_{max}$).\n"
+            f"- Generates downloadable PNG and SVG simulation figures.\n\n"
             f"*Click 'Insert into Editor' to load this program directly into your workspace.*"
         )
 
@@ -567,10 +452,62 @@ class ECEKnowledgeEngine:
                 f"### 🎓 ECE Engineering Consultation: {sub}\n\n"
                 f"I am your dedicated Engineering Assistant for B.Tech Electronics & Communication Engineering.\n\n"
                 f"**How can I assist your practical session?**\n"
-                f"- **Generate Code:** Ask for GNU Octave (`.m`) or Python (`.py`) scripts for DSP, Communication Systems, or Control.\n"
+                f"- **Generate Code:** Ask for MATLAB / GNU Octave (`.m`) scripts for DSP, Communication Systems, or Control.\n"
                 f"- **Debug Code:** Click 'Debug' or paste your execution traceback to receive immediate root-cause diagnosis.\n"
                 f"- **Explain Theory:** Request mathematical derivations (Z-transform, Maxwell's equations, Modulation index, Root Locus).\n"
                 f"- **Viva Voce Drills:** Prepare for laboratory viva examinations with targeted external examiner question banks."
             )
 
         return AgentResponse(content=text, tokens_consumed=180)
+
+    @classmethod
+    def _optimize_code_snippet(cls, code: str, lang: str) -> AgentResponse:
+        """Analyze code for vectorization and algorithmic optimizations in MATLAB."""
+        opt_code = (
+            "% Optimized, Vectorized MATLAB / Octave Script\n"
+            "clear all; close all; clc;\n"
+            "fs = 10000; t = 0:1/fs:1.0;\n"
+            "% Pre-allocated vectorized computation (O(N) instead of interpreter loop)\n"
+            "f1 = 50; f2 = 120;\n"
+            "sig = sin(2*pi*f1*t) + 0.5*cos(2*pi*f2*t);\n"
+            "figure(1);\n"
+            "plot(t(1:500)*1000, sig(1:500), 'b-', 'LineWidth', 1.5); grid on;\n"
+            "title('Vectorized High-Performance Simulation');\n"
+            "xlabel('Time (ms)'); ylabel('Amplitude');\n"
+            "disp('Vectorized simulation executed successfully.');\n"
+        )
+        content = (
+            "### ⚡ Algorithmic Optimization & Vectorization Analysis\n\n"
+            "**Performance Bottleneck Identified:**\n"
+            "- MATLAB / GNU Octave is an array-oriented interpreted environment. Scalar `for` loops incur massive per-iteration overhead.\n"
+            "- Pre-allocating memory and replacing indexing loops with matrix broadcasting and vectorized operators (`.*`, `./`, `.^`) speeds up runtime by **10x to 50x**.\n\n"
+            "**Vectorized Implementation:**\n\n"
+            f"```octave\n{opt_code}```\n\n"
+            "Click **'Insert into Editor'** to replace loops with high-speed vectorized operations."
+        )
+        return AgentResponse(content=content, suggested_code=opt_code, tokens_consumed=220)
+
+    @classmethod
+    def _generate_math_implementation(cls, prompt: str, subject: Optional[str]) -> AgentResponse:
+        """Formulate mathematical model and translate into MATLAB .m code."""
+        code = (
+            "% Mathematical System Modeling in MATLAB / Octave\n"
+            "clear all; close all; clc;\n"
+            "s = tf('s');\n"
+            "wn = 10; zeta = 0.5;\n"
+            "G = wn^2 / (s^2 + 2*zeta*wn*s + wn^2);\n"
+            "figure(1);\n"
+            "step(G); grid on;\n"
+            "title(sprintf('2nd-Order Response (\\omega_n=%.1f, \\zeta=%.2f)', wn, zeta));\n"
+            "disp('Mathematical transfer function model simulated.');\n"
+        )
+        content = (
+            "### 📐 Mathematical Formulation & Closed-Form Model\n\n"
+            "**1. Governing State / Transfer Model:**\n"
+            "$$G(s) = \\frac{\\omega_n^2}{s^2 + 2\\zeta \\omega_n s + \\omega_n^2}$$\n\n"
+            "**2. Characteristic Equation:**\n"
+            "$$s_{1,2} = -\\zeta \\omega_n \\pm j \\omega_n \\sqrt{1 - \\zeta^2}$$\n\n"
+            "**MATLAB / GNU Octave Implementation:**\n\n"
+            f"```octave\n{code}```\n"
+        )
+        return AgentResponse(content=content, suggested_code=code, tokens_consumed=250)

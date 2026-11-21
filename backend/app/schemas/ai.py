@@ -9,7 +9,7 @@ class AIChatRequest(BaseModel):
     prompt: str = Field(..., min_length=1)
     agent_role: str = "ECE Tutor"
     subject: Optional[str] = None # e.g. "Digital Signal Processing", "Control Systems", etc.
-    language: Optional[str] = "python" # "python" | "octave"
+    language: Optional[str] = "octave" # "octave" | "matlab"
     active_code: Optional[str] = None
     selected_code: Optional[str] = None
     last_error: Optional[str] = None

@@ -51,7 +51,7 @@ async def test_mandatory_16_step_student_workflow():
         proj_create_resp = await client.post("/api/v1/projects", json={
             "name": "Sine Wave Analysis Lab",
             "description": "Continuous and discrete sine wave generation with FFT and plotting",
-            "default_engine": "python"
+            "default_engine": "octave"
         }, headers=auth_headers)
         assert proj_create_resp.status_code == 201
         project = proj_create_resp.json()
@@ -59,10 +59,10 @@ async def test_mandatory_16_step_student_workflow():
         assert project["name"] == "Sine Wave Analysis Lab"
         print(f"[Step 4 PASS] Project created with ID: {project_id}")
 
-        # Step 5: Create a file (sine_wave.py)
+        # Step 5: Create a file (sine_wave.m)
         file_create_resp = await client.post(f"/api/v1/projects/{project_id}/files", json={
-            "name": "sine_wave.py",
-            "path": "/sine_wave.py",
+            "name": "sine_wave.m",
+            "path": "/sine_wave.m",
             "content": "",
             "is_entrypoint": True
         }, headers=auth_headers)
@@ -73,30 +73,27 @@ async def test_mandatory_16_step_student_workflow():
 
         # Step 6: Write a sine wave program
         sine_wave_code = """
-import numpy as np
-import matplotlib.pyplot as plt
+% 1. Generate 5 Hz Sine Wave in GNU Octave
+clear all; close all; clc;
+fs = 1000;
+t = 0:1/fs:1.0;
+f0 = 5;
+amplitude = 2.5;
+signal = amplitude * sin(2 * pi * f0 * t);
 
-# 1. Generate 5 Hz Sine Wave
-fs = 1000
-t = np.linspace(0, 1.0, 1000)
-f0 = 5
-amplitude = 2.5
-signal = amplitude * np.sin(2 * np.pi * f0 * t)
+% Matrix / Vector variable for inspection
+sample_summary = [f0, fs, amplitude, mean(signal), std(signal)];
 
-# Matrix / Vector variable for inspection
-sample_summary = np.array([f0, fs, amplitude, np.mean(signal), np.std(signal)])
+% Plotting
+figure(1);
+plot(t(1:200), signal(1:200), 'b-', 'LineWidth', 1.5);
+title('Synthesized 5 Hz Continuous Signal');
+xlabel('Time (seconds)');
+ylabel('Amplitude (V)');
+grid on;
 
-# Plotting
-plt.figure(figsize=(8, 3))
-plt.plot(t[:200], signal[:200], 'b-', linewidth=1.5, label='5 Hz Sine Wave')
-plt.title('Synthesized 5 Hz Continuous Signal')
-plt.xlabel('Time (seconds)')
-plt.ylabel('Amplitude (V)')
-plt.grid(True)
-plt.legend()
-
-print('Sine wave simulation completed successfully.')
-print(f'Signal length: {len(signal)} samples. Peak amplitude: {np.max(signal):.2f} V')
+disp('Sine wave simulation completed successfully.');
+printf('Signal length: %d samples. Peak amplitude: %.2f V\\n', length(signal), max(signal));
 """
         update_resp = await client.put(f"/api/v1/projects/files/{file_id}", json={
             "content": sine_wave_code
@@ -109,7 +106,7 @@ print(f'Signal length: {len(signal)} samples. Peak amplitude: {np.max(signal):.2
         exec_resp = await client.post("/api/v1/executions/run", json={
             "project_id": project_id,
             "file_id": file_id,
-            "engine": "python"
+            "engine": "octave"
         }, headers=auth_headers)
         assert exec_resp.status_code == 200
         exec_data = exec_resp.json()
@@ -187,7 +184,7 @@ print(f'Signal length: {len(signal)} samples. Peak amplitude: {np.max(signal):.2
         reopened = reopen_proj_resp.json()
         assert reopened["id"] == project_id
         assert len(reopened["files"]) >= 1
-        assert any(f["name"] == "sine_wave.py" for f in reopened["files"])
+        assert any(f["name"] == "sine_wave.m" for f in reopened["files"])
         print("[Step 15 PASS] Reopened saved project with all original files intact.")
 
         # Step 16: View execution history

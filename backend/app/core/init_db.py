@@ -26,6 +26,11 @@ async def init_database():
                 ai_existing = [row[1] for row in cursor.fetchall()]
                 if "suggested_code" not in ai_existing:
                     cursor.execute("ALTER TABLE ai_messages ADD COLUMN suggested_code TEXT")
+                # MATLAB-Only migration: ensure all existing projects and executions point to octave
+                cursor.execute("UPDATE projects SET default_engine = 'octave' WHERE default_engine != 'octave'")
+                cursor.execute("UPDATE executions SET engine = 'octave' WHERE engine != 'octave'")
+                cursor.execute("UPDATE project_files SET name = 'main.m', path = '/main.m' WHERE name = 'main.py'")
+                cursor.execute("DELETE FROM project_files WHERE name = 'main_python.py'")
             except Exception:
                 pass
         try:

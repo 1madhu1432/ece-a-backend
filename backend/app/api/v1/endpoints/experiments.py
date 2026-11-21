@@ -63,33 +63,16 @@ async def clone_experiment_to_project(
         user_id=current_user.id,
         name=f"Lab: {exp.title}",
         description=f"Cloned from ECE Experiment Library: {exp.objective}",
-        default_engine=exp.engine,
+        default_engine="octave",
         experiment_id=exp.id
     )
 
-    # Overwrite default entrypoint with verified experiment code
+    # Overwrite default entrypoint with verified MATLAB experiment code
     files = await file_repo.list_by_project(project.id)
     if files:
         entry = files[0]
-        await file_repo.update_file(entry, content=exp.default_code)
-
-        # Create complementary comparison file for side-by-side MATLAB & Python evaluation
-        if exp.python_code and entry.name.endswith(".m"):
-            await file_repo.create_file(
-                project_id=project.id,
-                name="main_python.py",
-                path="/main_python.py",
-                content=exp.python_code,
-                is_entrypoint=False
-            )
-        elif exp.matlab_code and entry.name.endswith(".py"):
-            await file_repo.create_file(
-                project_id=project.id,
-                name="main_octave.m",
-                path="/main_octave.m",
-                content=exp.matlab_code,
-                is_entrypoint=False
-            )
+        code_to_use = exp.matlab_code or exp.default_code
+        await file_repo.update_file(entry, content=code_to_use)
 
     await db.refresh(project, ["files"])
     return ProjectResponse.model_validate(project)

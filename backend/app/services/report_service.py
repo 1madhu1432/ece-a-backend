@@ -121,7 +121,7 @@ class ReportGenerator:
         if figures:
             story.append(Paragraph("5. SIMULATION WAVEFORMS / PLOTS", h2_style))
             for fig_path in figures:
-                if os.path.exists(fig_path):
+                if os.path.exists(fig_path) and fig_path.lower().endswith(('.png', '.jpg', '.jpeg')):
                     try:
                         img = Image(fig_path, width=450, height=220)
                         story.append(img)

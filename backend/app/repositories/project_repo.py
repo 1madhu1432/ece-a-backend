@@ -42,9 +42,8 @@ class ProjectRepository:
         self.db.add(project)
         await self.db.flush()
 
-        # Create default entrypoint file
-        ext = ".m" if default_engine == "octave" else ".py"
-        entry_name = f"main{ext}"
+        # Create default MATLAB entrypoint file
+        entry_name = "main.m"
         default_content = (
             "% ECE AI Studio - MATLAB/Octave Simulation\n"
             "clear all; close all; clc;\n\n"
@@ -58,21 +57,6 @@ class ProjectRepository:
             "xlabel('Time (s)');\n"
             "ylabel('Amplitude');\n"
             "disp('Sine wave simulation completed successfully.');\n"
-        ) if default_engine == "octave" else (
-            "# ECE AI Studio - Scientific Python Simulation\n"
-            "import numpy as np\n"
-            "import matplotlib.pyplot as plt\n\n"
-            "t = np.linspace(0, 1, 1000)\n"
-            "f = 5  # 5 Hz\n"
-            "x = np.sin(2 * np.pi * f * t)\n\n"
-            "plt.figure(figsize=(8, 4))\n"
-            "plt.plot(t, x, 'b-', label='5 Hz Sine')\n"
-            "plt.title('5 Hz Sine Wave Simulation')\n"
-            "plt.xlabel('Time (s)')\n"
-            "plt.ylabel('Amplitude')\n"
-            "plt.grid(True)\n"
-            "plt.legend()\n"
-            "print('Simulation completed.')\n"
         )
 
         entry_file = ProjectFile(

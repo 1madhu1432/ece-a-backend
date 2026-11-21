@@ -7,7 +7,7 @@ class ExecutionSubmitRequest(BaseModel):
     project_id: UUID
     file_id: Optional[UUID] = None
     code_override: Optional[str] = None
-    engine: str = Field(default="octave", pattern="^(octave|python)$")
+    engine: str = Field(default="octave", pattern="^(octave|matlab)$")
 
 class ExecutionArtifactResponse(BaseModel):
     id: UUID

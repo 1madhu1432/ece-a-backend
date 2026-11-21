@@ -22,7 +22,7 @@ class AIOrchestrator:
         prompt: str,
         agent_role: str = "ECE Tutor",
         subject: Optional[str] = None,
-        language: str = "python",
+        language: str = "octave",
         conversation_history: Optional[List[AgentChatMessage]] = None,
         active_code: Optional[str] = None,
         selected_code: Optional[str] = None,
@@ -100,11 +100,43 @@ class AIOrchestrator:
         messages = list(conversation_history or [])
         messages.append(AgentChatMessage(role="user", content=prompt))
 
-        resp = await active_provider.chat(
-            system_prompt=system_instruction,
-            messages=messages,
-            model=model
-        )
+        try:
+            resp = await active_provider.chat(
+                system_prompt=system_instruction,
+                messages=messages,
+                model=model
+            )
+            # If the provider failed or returned an error status message, fallback with full context!
+            if not resp or (resp.content and resp.content.startswith("> [Note:")):
+                return ECEKnowledgeEngine.synthesize_response(
+                    prompt=prompt,
+                    agent_role=agent_role,
+                    subject=subject,
+                    language=language,
+                    active_code=active_code,
+                    selected_code=selected_code,
+                    last_error=last_error,
+                    execution_output=execution_output,
+                    experiment_title=experiment_title,
+                    experiment_theory=experiment_theory,
+                    graph_metadata=graph_metadata,
+                    history=conversation_history
+                )
+        except Exception:
+            return ECEKnowledgeEngine.synthesize_response(
+                prompt=prompt,
+                agent_role=agent_role,
+                subject=subject,
+                language=language,
+                active_code=active_code,
+                selected_code=selected_code,
+                last_error=last_error,
+                execution_output=execution_output,
+                experiment_title=experiment_title,
+                experiment_theory=experiment_theory,
+                graph_metadata=graph_metadata,
+                history=conversation_history
+            )
 
         # Ensure suggested_code is extracted if LLM response contained code blocks
         if not resp.suggested_code:

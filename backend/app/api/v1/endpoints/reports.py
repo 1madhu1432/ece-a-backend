@@ -46,13 +46,13 @@ async def generate_report(
             if result:
                 exec_output = result.stdout + ("\n" + result.stderr if result.stderr else "")
 
-            # Load any figure artifacts generated in this execution
+            # Load any PNG figure artifacts generated in this execution for the PDF report
             art_stmt = select(ExecutionArtifact).where(ExecutionArtifact.execution_id == execution.id)
             artifacts = (await db.execute(art_stmt)).scalars().all()
             for art in artifacts:
-                if art.filename.endswith(".png") or art.artifact_type.startswith("figure"):
+                if art.filename.lower().endswith((".png", ".jpg", ".jpeg")) or art.artifact_type == "figure_png":
                     fig_path = os.path.join(settings.STORAGE_DIR, "artifacts", art.storage_key)
-                    if os.path.exists(fig_path):
+                    if os.path.exists(fig_path) and fig_path not in figures:
                         figures.append(fig_path)
 
             if execution.file_id:

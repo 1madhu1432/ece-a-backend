@@ -16,7 +16,6 @@ from app.repositories.project_repo import ProjectRepository
 from app.repositories.file_repo import FileRepository
 from app.repositories.execution_repo import ExecutionRepository
 from app.schemas.execution import ExecutionSubmitRequest, ExecutionResponse, ExecutionResultResponse, ExecutionArtifactResponse
-from execution_worker.runners.python_runner import PythonRunner
 from execution_worker.runners.octave_runner import OctaveRunner
 
 router = APIRouter()
@@ -44,21 +43,18 @@ async def run_code(
     if not code_to_run:
         raise HTTPException(status_code=400, detail="No source code provided to execute.")
 
-    # 1. Create execution record
+    # 1. Create execution record (MATLAB/GNU Octave engine)
     execution = await exec_repo.create_execution(
         user_id=current_user.id,
         project_id=project.id,
         file_id=req.file_id,
-        engine=req.engine
+        engine="octave"
     )
 
-    # 2. Execute via selected runner
-    if req.engine == "python":
-        runner = PythonRunner()
-    else:
-        runner = OctaveRunner()
+    # 2. Execute via GNU Octave runner
+    runner = OctaveRunner()
 
-    result = await runner.execute(code_to_run, timeout_seconds=15)
+    result = await runner.execute(code_to_run, timeout_seconds=25)
 
     status_str = "completed" if result.exit_code == 0 else "failed"
     if result.error == "TIMEOUT":
@@ -76,7 +72,7 @@ async def run_code(
         error_summary=result.error
     )
 
-    # 4. Save Artifacts (Figures)
+    # 4. Save Artifacts (Figures in both PNG and SVG)
     artifacts_resp = []
     for fig in result.figures:
         fig_idx = fig["fig_index"]
@@ -104,6 +100,31 @@ async def run_code(
                 file_size_bytes=art.file_size_bytes,
                 mime_type=art.mime_type,
                 download_url=f"/api/v1/storage/artifacts/{dest_filename}"
+            ))
+
+        if fig.get("svg_path") and os.path.exists(fig["svg_path"]):
+            clean_svg_name = f"Figure_{fig_idx}.svg"
+            dest_svg_filename = f"{execution.id}_{clean_svg_name}"
+            dest_svg_path = os.path.join(settings.STORAGE_DIR, "artifacts", dest_svg_filename)
+            shutil.copyfile(fig["svg_path"], dest_svg_path)
+            file_size_svg = os.path.getsize(dest_svg_path)
+
+            art_svg = await exec_repo.add_artifact(
+                execution_id=execution.id,
+                artifact_type="figure_svg",
+                storage_key=dest_svg_filename,
+                filename=clean_svg_name,
+                file_size_bytes=file_size_svg,
+                mime_type="image/svg+xml"
+            )
+            artifacts_resp.append(ExecutionArtifactResponse(
+                id=art_svg.id,
+                artifact_type="figure_svg",
+                storage_key=art_svg.storage_key,
+                filename=art_svg.filename,
+                file_size_bytes=art_svg.file_size_bytes,
+                mime_type="image/svg+xml",
+                download_url=f"/api/v1/storage/artifacts/{dest_svg_filename}"
             ))
 
     # Clean temporary execution sandbox after copying artifacts

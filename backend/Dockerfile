@@ -2,10 +2,15 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
-# Install system dependencies
+# Install system dependencies including GNU Octave, gnuplot, fonts for scientific computing and report generation
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     curl \
+    octave \
+    octave-signal \
+    octave-control \
+    gnuplot \
+    fonts-freefont-ttf \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .

@@ -58,7 +58,7 @@ async def test_project_crud_and_files():
         proj_resp = await client.post("/api/v1/projects", json={
             "name": "DSP Filter Lab 1",
             "description": "Design of FIR Low Pass Filter",
-            "default_engine": "python"
+            "default_engine": "octave"
         }, headers=headers)
         assert proj_resp.status_code == 201
         project = proj_resp.json()
@@ -71,19 +71,19 @@ async def test_project_crud_and_files():
         files = files_resp.json()
         assert len(files) >= 1
         entry_file = files[0]
-        assert entry_file["name"] == "main.py"
+        assert entry_file["name"] == "main.m"
 
         # 4. Create New File
         create_file_resp = await client.post(f"/api/v1/projects/{project_id}/files", json={
-            "name": "helper.py",
-            "path": "/helper.py",
-            "content": "def get_sampling_rate(): return 8000"
+            "name": "helper.m",
+            "path": "/helper.m",
+            "content": "function fs = get_sampling_rate()\nfs = 8000;\nendfunction"
         }, headers=headers)
         assert create_file_resp.status_code == 201
-        assert create_file_resp.json()["name"] == "helper.py"
+        assert create_file_resp.json()["name"] == "helper.m"
 
 @pytest.mark.asyncio
-async def test_python_code_execution_and_figures():
+async def test_matlab_code_execution_and_figures():
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         login_resp = await client.post("/api/v1/auth/login", json={
@@ -95,43 +95,40 @@ async def test_python_code_execution_and_figures():
 
         proj_resp = await client.post("/api/v1/projects", json={
             "name": "Execution Test Project",
-            "default_engine": "python"
+            "default_engine": "octave"
         }, headers=headers)
         project_id = proj_resp.json()["id"]
 
-        python_code = """
-import numpy as np
-import matplotlib.pyplot as plt
+        matlab_code = """
+% ECE AI Studio - MATLAB Simulation
+clear all; close all; clc;
+fs = 500;
+t = 0:1/fs:0.5;
+freq = 10;
+amplitude = 3.0;
+wave = amplitude * sin(2 * pi * freq * t);
+filter_taps = [0.1, 0.2, 0.4, 0.2, 0.1];
 
-fs = 500
-t = np.linspace(0, 0.5, 250)
-freq = 10
-amplitude = 3.0
-wave = amplitude * np.sin(2 * np.pi * freq * t)
+figure(1);
+plot(t, wave, 'g-');
+grid on;
+title('Synthesized Waveform');
+xlabel('Time (s)');
+ylabel('Amplitude');
 
-filter_taps = np.array([0.1, 0.2, 0.4, 0.2, 0.1])
-
-plt.figure(figsize=(7, 3))
-plt.plot(t, wave, 'g-', label='10 Hz Sine Wave')
-plt.title('Synthesized Waveform')
-plt.xlabel('Time (s)')
-plt.ylabel('Amplitude')
-plt.grid(True)
-plt.legend()
-
-print('Python Simulation Completed Successfully.')
-print(f'Max amplitude: {np.max(wave):.2f}')
+disp('MATLAB Simulation Completed Successfully.');
+printf('Max amplitude: %.2f\\n', max(wave));
 """
         exec_resp = await client.post("/api/v1/executions/run", json={
             "project_id": project_id,
-            "engine": "python",
-            "code_override": python_code
+            "engine": "octave",
+            "code_override": matlab_code
         }, headers=headers)
         assert exec_resp.status_code == 200
         exec_data = exec_resp.json()
         assert exec_data["status"] == "completed"
         assert exec_data["exit_code"] == 0
-        assert "Python Simulation Completed Successfully" in exec_data["results"]["stdout"]
+        assert "MATLAB Simulation Completed Successfully" in exec_data["results"]["stdout"]
 
         # Verify Variable Inspector captured variables
         variables = exec_data["results"]["variables_json"]
@@ -204,7 +201,7 @@ async def test_lab_report_generation():
 
         proj_resp = await client.post("/api/v1/projects", json={
             "name": "Report Test Lab",
-            "default_engine": "python"
+            "default_engine": "octave"
         }, headers=headers)
         project_id = proj_resp.json()["id"]
 
