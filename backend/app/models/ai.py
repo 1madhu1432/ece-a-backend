@@ -21,6 +21,7 @@ class AIMessage(TimeStampedModel):
     agent_role = Column(String(50), nullable=False, default="ECE Tutor")
     content = Column(Text, nullable=False)
     code_diff = Column(Text, nullable=True)
+    suggested_code = Column(Text, nullable=True)
     tokens_consumed = Column(Integer, nullable=False, default=0)
 
     conversation = relationship("AIConversation", back_populates="messages")

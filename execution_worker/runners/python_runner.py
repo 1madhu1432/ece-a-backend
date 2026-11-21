@@ -5,6 +5,7 @@ import json
 import uuid
 import asyncio
 import subprocess
+import tempfile
 from pathlib import Path
 from typing import Dict, Any, List, Optional
 from execution_worker.runners.base_runner import BaseRunner, ExecutionResultPayload
@@ -111,7 +112,7 @@ with open('output_meta.json', 'w', encoding='utf-8') as f:
 
 class PythonRunner(BaseRunner):
     def __init__(self, workspace_root: Optional[str] = None):
-        self.workspace_root = workspace_root or str(Path.cwd() / "temp_execution")
+        self.workspace_root = workspace_root or os.path.join(tempfile.gettempdir(), "ece_ai_execution")
         os.makedirs(self.workspace_root, exist_ok=True)
 
     async def execute(self, code: str, timeout_seconds: int = 15) -> ExecutionResultPayload:
@@ -137,25 +138,26 @@ class PythonRunner(BaseRunner):
         safe_env["OPENBLAS_NUM_THREADS"] = "2"
 
         try:
-            # Run sandboxed subprocess
-            proc = await asyncio.create_subprocess_exec(
-                python_bin,
-                "wrapper.py",
-                cwd=str(run_dir),
-                env=safe_env,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
-            )
-
-            try:
-                stdout_data, stderr_data = await asyncio.wait_for(
-                    proc.communicate(),
-                    timeout=timeout_seconds
+            # Run sandboxed subprocess via thread to ensure 100% compatibility across all event loops (including Windows)
+            def _run_proc():
+                p = subprocess.Popen(
+                    [python_bin, "wrapper.py"],
+                    cwd=str(run_dir),
+                    env=safe_env,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE
                 )
-                exit_code = proc.returncode
-            except asyncio.TimeoutError:
-                proc.kill()
-                await proc.wait()
+                try:
+                    stdout_b, stderr_b = p.communicate(timeout=timeout_seconds)
+                    return p.returncode, stdout_b, stderr_b, False
+                except subprocess.TimeoutExpired:
+                    p.kill()
+                    p.wait()
+                    return -1, b"", b"Execution timed out after 15 seconds.", True
+
+            exit_code, stdout_data, stderr_data, is_timeout = await asyncio.to_thread(_run_proc)
+
+            if is_timeout:
                 duration_ms = int((time.perf_counter() - start_time) * 1000)
                 return ExecutionResultPayload(
                     stdout="",

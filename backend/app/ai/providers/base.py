@@ -18,6 +18,7 @@ class BaseAIProvider(ABC):
         self, 
         system_prompt: str, 
         messages: List[AgentChatMessage], 
-        temperature: float = 0.3
+        temperature: float = 0.3,
+        model: Optional[str] = None
     ) -> AgentResponse:
         pass

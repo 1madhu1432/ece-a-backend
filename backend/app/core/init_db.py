@@ -22,6 +22,10 @@ async def init_database():
                     cursor.execute("ALTER TABLE experiments ADD COLUMN python_code TEXT")
                 if "viva_questions_json" not in existing:
                     cursor.execute("ALTER TABLE experiments ADD COLUMN viva_questions_json JSON DEFAULT '[]'")
+                cursor.execute("PRAGMA table_info(ai_messages)")
+                ai_existing = [row[1] for row in cursor.fetchall()]
+                if "suggested_code" not in ai_existing:
+                    cursor.execute("ALTER TABLE ai_messages ADD COLUMN suggested_code TEXT")
             except Exception:
                 pass
         try:

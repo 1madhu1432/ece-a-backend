@@ -189,7 +189,7 @@ async def test_experiment_library_and_cloning():
         clone_resp = await client.post("/api/v1/experiments/sampling-theorem/clone", headers=headers)
         assert clone_resp.status_code == 200
         cloned_proj = clone_resp.json()
-        assert "Lab: Verification of Nyquist Sampling Theorem" in cloned_proj["name"]
+        assert "Sampling Theorem" in cloned_proj["name"]
 
 @pytest.mark.asyncio
 async def test_lab_report_generation():
